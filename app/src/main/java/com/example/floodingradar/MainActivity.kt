@@ -10,7 +10,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import com.example.floodingradar.ui.screens.map.MapScreen
 
+import androidx.activity.viewModels
+import com.example.floodingradar.viewmodel.MapViewModel
+
 class MainActivity : ComponentActivity() {
+    private val mapViewModel: MapViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -20,7 +25,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    MapScreen()
+                    MapScreen(viewModel = mapViewModel)
                 }
             }
         }
