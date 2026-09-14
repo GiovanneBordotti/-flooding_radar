@@ -6,6 +6,7 @@ class AlertaCreate(BaseModel):
     latitude: float
     longitude: float
     observacao: str | None = None
+    usuario: str = "Anônimo"
 
 class AlertaResponse(AlertaCreate):
     id: int

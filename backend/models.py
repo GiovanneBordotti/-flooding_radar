@@ -14,4 +14,5 @@ class Alerta(Base):
     localizacao = Column(Geometry('POINT', srid=4326))
     data_hora = Column(DateTime, default=datetime.datetime.utcnow)
     status = Column(String(20), default="pendente")
+    usuario = Column(String(100), default="Anônimo")
 

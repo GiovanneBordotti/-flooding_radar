@@ -7,6 +7,6 @@ data class Alerta(
     val longitude: Double,
     val observacao: String? = null,
     val data_hora: String? = null,
+    val usuario: String? = null,
     val status: String? = "pendente"
 )
-

@@ -20,3 +20,7 @@ local.properties
 /backend/venv
 /backend/__pycache__
 /backend/.pytest_cache
+
+# Firebase secrets
+app/google-services.json
+backend/firebase-adminsdk.json

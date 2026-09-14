@@ -17,14 +17,19 @@ services:
   pgweb:
     image: sosedoff/pgweb
     container_name: flooding_radar_pgweb
-    restart: always
     ports:
       - "8081:8081"
     environment:
-      - DATABASE_URL=postgres://postgres:postgres@db:5432/flooding_radar?sslmode=disable
+      - DATABASE_URL=postgres://postgres:postgres@db:5432/flooding_radar
     depends_on:
       - db
+      
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: flooding_radar_rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672" # Interface visual do RabbitMQ
 
 volumes:
   postgis_data:
-

@@ -10,7 +10,8 @@ data class AlertaEntity(
     val tipo_alerta: String,
     val latitude: Double,
     val longitude: Double,
-    val observacao: String?,
-    var status: String = "pendente" // pendente ou enviado
+    val observacao: String? = null,
+    val usuario: String = "Anônimo",
+    var status: String = "pendente", // pendente, enviado
+    val data_hora: String = ""
 )
-

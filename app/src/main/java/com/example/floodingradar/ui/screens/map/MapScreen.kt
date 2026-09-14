@@ -1,16 +1,20 @@
 package com.example.floodingradar.ui.screens.map
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,72 +32,91 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MapScreen(viewModel: MapViewModel) {
+fun MapScreen(viewModel: MapViewModel, onNavigateToReports: () -> Unit = {}, onNavigateToSettings: () -> Unit = {}) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    
-    var showBottomSheet by remember { mutableStateOf(false) }
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    
-    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val alertas by viewModel.alertas.collectAsState()
+
+    // Filter alertas for TODAY only for the Map and Nearby Dialog
+    val todaySdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+    val todayString = todaySdf.format(java.util.Date())
+    val alertasHoje = alertas.filter { it.data_hora?.startsWith(todayString) == true }
+
+    var showOfflineDialog by remember { mutableStateOf(false) }
+    var showNearbyDialog by remember { mutableStateOf(false) }
 
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
     
-    var initialPosition by remember { mutableStateOf(LatLng(-23.5505, -46.6333)) }
+    val saoPaulo = LatLng(-23.5505, -46.6333)
     val cameraPositionState = rememberCameraPositionState {
-        position = CameraPosition.fromLatLngZoom(initialPosition, 12f)
+        position = CameraPosition.fromLatLngZoom(saoPaulo, 12f)
     }
+
+    var hasLocationPermission by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        if (permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true) {
-            try {
-                fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-                    if (location != null) {
-                        val userLatLng = LatLng(location.latitude, location.longitude)
-                        initialPosition = userLatLng
-                        cameraPositionState.position = CameraPosition.fromLatLngZoom(userLatLng, 15f)
+        contract = ActivityResultContracts.RequestPermission(),
+        onResult = { isGranted ->
+            hasLocationPermission = isGranted
+            if (isGranted) {
+                try {
+                    fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+                        location?.let {
+                            cameraPositionState.position = CameraPosition.fromLatLngZoom(
+                                LatLng(it.latitude, it.longitude), 15f
+                            )
+                        }
                     }
+                } catch (e: SecurityException) {
+                    e.printStackTrace()
                 }
-            } catch (e: SecurityException) {
-                e.printStackTrace()
             }
         }
-    }
+    )
 
     LaunchedEffect(Unit) {
-        viewModel.buscarAlertas()
-        val hasPermission = ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-
-        if (hasPermission) {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            hasLocationPermission = true
             fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-                if (location != null) {
-                    val userLatLng = LatLng(location.latitude, location.longitude)
-                    initialPosition = userLatLng
-                    cameraPositionState.position = CameraPosition.fromLatLngZoom(userLatLng, 15f)
+                location?.let {
+                    cameraPositionState.position = CameraPosition.fromLatLngZoom(
+                        LatLng(it.latitude, it.longitude), 15f
+                    )
                 }
             }
         } else {
-            permissionLauncher.launch(
-                arrayOf(
-                    Manifest.permission.ACCESS_FINE_LOCATION,
-                    Manifest.permission.ACCESS_COARSE_LOCATION
-                )
-            )
+            permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+        
+        viewModel.buscarAlertas()
+    }
+
+    // Exibe Snackbars (mensagens pop-up) do ViewModel
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(Unit) {
+        viewModel.mensagensUi.collect { msg ->
+            snackbarHostState.showSnackbar(msg)
         }
     }
+
+    var showBottomSheet by remember { mutableStateOf(false) }
+    var showConfirmDialog by remember { mutableStateOf<String?>(null) }
+    var showDeleteConfirmDialog by remember { mutableStateOf<Int?>(null) }
+    var observacao by remember { mutableStateOf("") }
+    var tipoOutro by remember { mutableStateOf("") }
+    var isOutroSelected by remember { mutableStateOf(false) }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
+
+    var reportLocation by remember { mutableStateOf<com.google.android.gms.maps.model.LatLng?>(null) }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
             ModalDrawerSheet {
-                Spacer(Modifier.height(16.dp))
-                Text("Radar de Alagamentos", modifier = Modifier.padding(16.dp), style = MaterialTheme.typography.titleLarge)
+                Spacer(Modifier.height(12.dp))
+                Text("Menu", modifier = Modifier.padding(16.dp), style = MaterialTheme.typography.titleLarge)
                 HorizontalDivider()
                 NavigationDrawerItem(
                     label = { Text("Mapa") },
@@ -102,18 +125,50 @@ fun MapScreen(viewModel: MapViewModel) {
                     modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
                 )
                 NavigationDrawerItem(
+                    label = { Text("Relatório Histórico") },
+                    selected = false,
+                    onClick = { 
+                        scope.launch { drawerState.close() }
+                        onNavigateToReports() 
+                    },
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                )
+                NavigationDrawerItem(
+                    label = { Text("Alertas na Região Hoje (3km)") },
+                    selected = false,
+                    onClick = { 
+                        scope.launch { drawerState.close() }
+                        showNearbyDialog = true 
+                    },
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                )
+                NavigationDrawerItem(
                     label = { Text("Meus Alertas (Offline)") },
                     selected = false,
-                    onClick = { /* TODO: Offline Alerts */ },
+                    onClick = { 
+                        scope.launch { drawerState.close() }
+                        showOfflineDialog = true 
+                    },
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                )
+                HorizontalDivider()
+                NavigationDrawerItem(
+                    label = { Text("Configurações") },
+                    selected = false,
+                    onClick = { 
+                        scope.launch { drawerState.close() }
+                        onNavigateToSettings() 
+                    },
                     modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
                 )
             }
         }
     ) {
         Scaffold(
+            snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
                 TopAppBar(
-                    title = { Text("Mapa de Alertas") },
+                    title = { Text("Mapa de Alertas (Hoje)") },
                     navigationIcon = {
                         IconButton(onClick = { scope.launch { drawerState.open() } }) {
                             Icon(Icons.Default.Menu, contentDescription = "Menu")
@@ -129,7 +184,10 @@ fun MapScreen(viewModel: MapViewModel) {
             floatingActionButtonPosition = FabPosition.Center,
             floatingActionButton = {
                 ExtendedFloatingActionButton(
-                    onClick = { showBottomSheet = true },
+                    onClick = { 
+                        reportLocation = cameraPositionState.position.target
+                        showBottomSheet = true 
+                    },
                     icon = { Icon(Icons.Default.Add, "Reportar") },
                     text = { Text("Reportar Ocorrência") },
                     containerColor = MaterialTheme.colorScheme.primary,
@@ -147,12 +205,54 @@ fun MapScreen(viewModel: MapViewModel) {
                     // Coloca um padding na direita/baixo para o Logo do Google e Zoom subirem um pouco
                     contentPadding = PaddingValues(bottom = 80.dp)
                 ) {
-                    alertas.forEach { alerta ->
-                        Marker(
+                    val sharedPref = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+                    val usuarioLogado = sharedPref.getString("nome_usuario", "Anônimo") ?: "Anônimo"
+
+                    alertasHoje.filter { it.status != "removido" }.forEach { alerta ->
+                        val dataFormatada = alerta.data_hora?.let { dh ->
+                            try {
+                                val parser = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.getDefault())
+                                val date = parser.parse(dh.substringBefore('.'))
+                                val formatter = java.text.SimpleDateFormat("dd/MM HH:mm", java.util.Locale.getDefault())
+                                date?.let { formatter.format(it) }
+                            } catch (e: Exception) { null }
+                        } ?: ""
+
+                        val obsStr = if (alerta.observacao.isNullOrBlank()) "" else " - ${alerta.observacao}"
+                        val tempoStr = if (dataFormatada.isNotBlank()) " ($dataFormatada)" else ""
+
+                        MarkerInfoWindowContent(
                             state = MarkerState(position = LatLng(alerta.latitude, alerta.longitude)),
                             title = alerta.tipo_alerta,
-                            snippet = alerta.observacao ?: "Status: ${alerta.status}"
-                        )
+                            snippet = "${alerta.usuario}$tempoStr$obsStr",
+                            onInfoWindowClick = {
+                                if (alerta.usuario == usuarioLogado && alerta.id != null) {
+                                    showDeleteConfirmDialog = alerta.id
+                                }
+                            }
+                        ) { marker ->
+                            Row(
+                                modifier = Modifier.padding(4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f, fill = false)) {
+                                    Text(marker.title ?: "", fontWeight = FontWeight.Bold)
+                                    Text(marker.snippet ?: "", style = MaterialTheme.typography.bodySmall)
+                                }
+                                if (alerta.usuario == usuarioLogado) {
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Icon(
+                                            imageVector = Icons.Default.Delete,
+                                            contentDescription = "Excluir",
+                                            tint = androidx.compose.ui.graphics.Color.Red,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Text("Excluir", style = MaterialTheme.typography.labelSmall, color = androidx.compose.ui.graphics.Color.Red)
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 
@@ -164,51 +264,248 @@ fun MapScreen(viewModel: MapViewModel) {
                 )
             }
 
+            if (showDeleteConfirmDialog != null) {
+                AlertDialog(
+                    onDismissRequest = { showDeleteConfirmDialog = null },
+                    title = { Text("Excluir Alerta") },
+                    text = { Text("Deseja realmente retirar este alerta do mapa?") },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                viewModel.removerAlerta(showDeleteConfirmDialog!!)
+                                showDeleteConfirmDialog = null
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                        ) {
+                            Text("Excluir")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showDeleteConfirmDialog = null }) { Text("Cancelar") }
+                    }
+                )
+            }
+
+            if (showConfirmDialog != null) {
+                val tipo = if (showConfirmDialog == "Outro") tipoOutro else showConfirmDialog!!
+                AlertDialog(
+                    onDismissRequest = { showConfirmDialog = null },
+                    title = { Text("Confirmar Alerta") },
+                    text = { Text("Você tem certeza que deseja reportar '$tipo' neste local?") },
+                    confirmButton = {
+                        val sharedPref = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+                        val usuarioLogado = sharedPref.getString("nome_usuario", "Anônimo") ?: "Anônimo"
+                        
+                        Button(onClick = {
+                            val target = reportLocation ?: cameraPositionState.position.target
+                            viewModel.enviarAlerta(tipo, target.latitude, target.longitude, observacao, usuarioLogado)
+                            showConfirmDialog = null
+                            showBottomSheet = false
+                            observacao = ""
+                            tipoOutro = ""
+                            isOutroSelected = false
+                        }) {
+                            Text("Confirmar")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showConfirmDialog = null }) { Text("Cancelar") }
+                    }
+                )
+            }
+
             if (showBottomSheet) {
-                var observacao by remember { mutableStateOf("") }
-                
                 ModalBottomSheet(
-                    onDismissRequest = { showBottomSheet = false },
+                    onDismissRequest = { 
+                        showBottomSheet = false 
+                        isOutroSelected = false
+                        tipoOutro = ""
+                    },
                     sheetState = sheetState
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp)
-                    ) {
-                        Text(
-                            text = "O que você deseja reportar?",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(bottom = 8.dp)
-                        )
-                        
-                        OutlinedTextField(
-                            value = observacao,
-                            onValueChange = { observacao = it },
-                            label = { Text("Observação (Opcional)") },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 16.dp),
-                            shape = RoundedCornerShape(12.dp)
-                        )
+                    Box(Modifier.fillMaxSize()) {
+                        LazyColumn {
+                            item {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp)
+                                ) {
+                                    Text(
+                                        text = "O que você deseja reportar?",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(bottom = 8.dp)
+                                    )
+                                    
+                                    OutlinedTextField(
+                                        value = observacao,
+                                        onValueChange = { observacao = it },
+                                        label = { Text("Observação (Opcional)") },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(bottom = 16.dp),
+                                        shape = RoundedCornerShape(12.dp)
+                                    )
 
-                        val onReport = { tipo: String ->
-                            val target = cameraPositionState.position.target
-                            viewModel.enviarAlerta(tipo, target.latitude, target.longitude, observacao)
-                            showBottomSheet = false
-                            observacao = "" // Reset
+                                    ReportOptionItem(text = "Alagamento", color = MaterialTheme.colorScheme.primary) { showConfirmDialog = "Alagamento" }
+                                    ReportOptionItem(text = "Árvore Caída", color = MaterialTheme.colorScheme.error) { showConfirmDialog = "Árvore Caída" }
+                                    ReportOptionItem(text = "Trânsito / Bloqueio", color = MaterialTheme.colorScheme.tertiary) { showConfirmDialog = "Trânsito / Bloqueio" }
+                                    
+                                    if (isOutroSelected) {
+                                        OutlinedTextField(
+                                            value = tipoOutro,
+                                            onValueChange = { tipoOutro = it },
+                                            label = { Text("Qual o tipo de problema?") },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 8.dp),
+                                            shape = RoundedCornerShape(12.dp)
+                                        )
+                                        Button(
+                                            onClick = { 
+                                                if (tipoOutro.isNotBlank()) showConfirmDialog = "Outro" 
+                                            },
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Text("Reportar Problema")
+                                        }
+                                    } else {
+                                        ReportOptionItem(text = "Outro", color = androidx.compose.ui.graphics.Color.Gray) { isOutroSelected = true }
+                                    }
+                                    
+                                    Spacer(modifier = Modifier.padding(bottom = 32.dp))
+                                }
+                            }
                         }
-
-                        ReportOptionItem(text = "Alagamento", color = MaterialTheme.colorScheme.primary) { onReport("Alagamento") }
-                        ReportOptionItem(text = "Árvore Caída", color = MaterialTheme.colorScheme.error) { onReport("Árvore Caída") }
-                        ReportOptionItem(text = "Trânsito / Bloqueio", color = MaterialTheme.colorScheme.tertiary) { onReport("Trânsito / Bloqueio") }
-                        
-                        Spacer(modifier = Modifier.padding(bottom = 32.dp))
                     }
                 }
             }
         }
+    }
+
+    if (showNearbyDialog) {
+        val myLoc = cameraPositionState.position.target // Usa o centro do mapa como "Minha Localização" (ou a última conhecida)
+        val context = LocalContext.current
+        
+        // Filtra os alertas em um raio de 3km (3000 metros)
+        val proximos = alertasHoje.filter { a ->
+            val results = FloatArray(1)
+            android.location.Location.distanceBetween(myLoc.latitude, myLoc.longitude, a.latitude, a.longitude, results)
+            results[0] <= 3000f
+        }.sortedBy { a ->
+            val results = FloatArray(1)
+            android.location.Location.distanceBetween(myLoc.latitude, myLoc.longitude, a.latitude, a.longitude, results)
+            results[0]
+        }
+
+        AlertDialog(
+            onDismissRequest = { showNearbyDialog = false },
+            title = { Text("Alertas Num Raio de 3km") },
+            text = {
+                if (proximos.isEmpty()) {
+                    Text("Nenhum alerta reportado nos arredores (3km).")
+                } else {
+                    LazyColumn {
+                        items(proximos) { p ->
+                            var rua by remember { mutableStateOf("Buscando endereço...") }
+                            
+                            LaunchedEffect(p) {
+                                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                    try {
+                                        val geocoder = android.location.Geocoder(context, java.util.Locale("pt", "BR"))
+                                        val addresses = geocoder.getFromLocation(p.latitude, p.longitude, 1)
+                                        rua = if (!addresses.isNullOrEmpty()) {
+                                            addresses[0].thoroughfare ?: "Rua desconhecida"
+                                        } else {
+                                            "Rua desconhecida"
+                                        }
+                                    } catch (e: Exception) {
+                                        rua = "Endereço indisponível"
+                                    }
+                                }
+                            }
+
+                            val results = FloatArray(1)
+                            android.location.Location.distanceBetween(myLoc.latitude, myLoc.longitude, p.latitude, p.longitude, results)
+                            val distance = String.format("%.1f", results[0] / 1000)
+
+                            val dataFormatada = p.data_hora?.let { dh ->
+                                try {
+                                    val parser = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.getDefault())
+                                    val date = parser.parse(dh.substringBefore('.'))
+                                    val formatter = java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault())
+                                    date?.let { formatter.format(it) } ?: "Sem data"
+                                } catch (e: Exception) { "Data inválida" }
+                            } ?: "Sem data"
+
+                            Card(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                            ) {
+                                val sharedPref = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+                                val usuarioLogado = sharedPref.getString("nome_usuario", "Anônimo") ?: "Anônimo"
+
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    if (p.status == "removido") {
+                                        Text(text = "${p.tipo_alerta} [Retirado pelo autor]", fontWeight = FontWeight.Bold, color = androidx.compose.ui.graphics.Color.Gray)
+                                        Text(text = "Em: $dataFormatada", style = MaterialTheme.typography.bodySmall, color = androidx.compose.ui.graphics.Color.Gray)
+                                    } else {
+                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(text = p.tipo_alerta, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+                                                if (!p.observacao.isNullOrBlank()) {
+                                                    Text(text = "Obs: ${p.observacao}", style = MaterialTheme.typography.bodyMedium, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
+                                                }
+                                                Text(text = "Rua: $rua", style = MaterialTheme.typography.bodyMedium)
+                                                Text(text = "Distância: $distance km", style = MaterialTheme.typography.bodySmall)
+                                                Text(text = "Em: $dataFormatada", style = MaterialTheme.typography.bodySmall)
+                                                Text(text = "Por: ${p.usuario}", style = MaterialTheme.typography.bodySmall, color = androidx.compose.ui.graphics.Color.Gray)
+                                            }
+                                            if (p.usuario == usuarioLogado && p.id != null) {
+                                                IconButton(onClick = { viewModel.removerAlerta(p.id) }) {
+                                                    Icon(Icons.Default.Delete, contentDescription = "Remover Alerta", tint = MaterialTheme.colorScheme.error)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showNearbyDialog = false }) { Text("Fechar") }
+            }
+        )
+    }
+
+    if (showOfflineDialog) {
+        val pendentes = alertas.filter { it.status == "pendente" }
+
+        AlertDialog(
+            onDismissRequest = { showOfflineDialog = false },
+            title = { Text("Meus Alertas Offline") },
+            text = {
+                if (pendentes.isEmpty()) {
+                    Text("Nenhum alerta pendente de sincronização. Tudo em dia!")
+                } else {
+                    Column {
+                        Text("Estes alertas estão salvos localmente e aguardando conexão:")
+                        Spacer(modifier = Modifier.height(8.dp))
+                        pendentes.forEach { p ->
+                            Text("- ${p.tipo_alerta}", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showOfflineDialog = false }) {
+                    Text("Entendi")
+                }
+            }
+        )
     }
 }
 

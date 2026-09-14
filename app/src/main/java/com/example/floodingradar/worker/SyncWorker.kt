@@ -25,7 +25,8 @@ class SyncWorker(
                     tipo_alerta = alertaLocal.tipo_alerta,
                     latitude = alertaLocal.latitude,
                     longitude = alertaLocal.longitude,
-                    observacao = alertaLocal.observacao
+                    observacao = alertaLocal.observacao,
+                    usuario = alertaLocal.usuario
                 )
 
                 // Envia para o Backend

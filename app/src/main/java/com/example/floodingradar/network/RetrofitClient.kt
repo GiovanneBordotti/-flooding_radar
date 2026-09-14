@@ -4,8 +4,8 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
 object RetrofitClient {
-    // 10.0.2.2 é o endereço especial do emulador Android para acessar o localhost da máquina hospedeira
-    private const val BASE_URL = "http://10.0.2.2:8000/"
+    // URL pública gerada pelo Ngrok conectando os celulares do mundo todo ao seu PC local
+    private const val BASE_URL = "https://unnatural-slacking-enlighten.ngrok-free.dev/"
 
     val instance: AlertaApi by lazy {
         val retrofit = Retrofit.Builder()
