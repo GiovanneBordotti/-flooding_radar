@@ -72,6 +72,8 @@ fun SettingsScreen(onBack: () -> Unit) {
 
             Text("Notificações Push", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
             
+            var notificacoesRaioApenas by remember { mutableStateOf(sharedPref.getBoolean("notificacoes_raio_apenas", true)) }
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -94,6 +96,44 @@ fun SettingsScreen(onBack: () -> Unit) {
                         }
                     }
                 )
+            }
+
+            if (notificacoesAtivadas) {
+                var raioKm by remember { mutableStateOf(sharedPref.getInt("notificacoes_raio_km", 3).toFloat()) }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Filtrar por Distância", style = MaterialTheme.typography.bodyLarge)
+                        Text("Silencia notificações de ocorrências muito distantes de você.", style = MaterialTheme.typography.bodySmall, color = androidx.compose.ui.graphics.Color.Gray)
+                    }
+                    Switch(
+                        checked = notificacoesRaioApenas,
+                        onCheckedChange = { isChecked ->
+                            notificacoesRaioApenas = isChecked
+                            sharedPref.edit().putBoolean("notificacoes_raio_apenas", isChecked).apply()
+                        }
+                    )
+                }
+                
+                if (notificacoesRaioApenas) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Text("Raio do Radar: ${raioKm.toInt()} km", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                        Slider(
+                            value = raioKm,
+                            onValueChange = { novoValor ->
+                                raioKm = novoValor
+                            },
+                            onValueChangeFinished = {
+                                sharedPref.edit().putInt("notificacoes_raio_km", raioKm.toInt()).apply()
+                            },
+                            valueRange = 1f..10f,
+                            steps = 8 // 1 a 10
+                        )
+                    }
+                }
             }
         }
     }

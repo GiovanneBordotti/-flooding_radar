@@ -10,12 +10,16 @@ cred = credentials.Certificate("firebase-adminsdk.json")
 firebase_admin.initialize_app(cred)
 
 def enviar_push_notification(alerta):
-    # Envia para o tópico "alertas" que todos os celulares estarão inscritos
+    # Envia apenas 'data' para que o Android intercepte silenciosamente
+    # e decida se deve mostrar o Pop-up com base na distancia (< 3km) e autor
     mensagem_push = messaging.Message(
-        notification=messaging.Notification(
-            title="⚠️ Novo Alerta na Região!",
-            body=f"{alerta.tipo_alerta} reportado por {alerta.usuario} perto de você."
-        ),
+        data={
+            "tipo_alerta": alerta.tipo_alerta,
+            "usuario": alerta.usuario,
+            "latitude": str(alerta.latitude),
+            "longitude": str(alerta.longitude),
+            "id": str(alerta.id) if alerta.id else ""
+        },
         topic="alertas"
     )
     resposta = messaging.send(mensagem_push)

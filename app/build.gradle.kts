@@ -72,6 +72,9 @@ dependencies {
     // WorkManager KTX
     implementation("androidx.work:work-runtime-ktx:2.9.1")
 
+    // Local Broadcast Manager
+    implementation("androidx.localbroadcastmanager:localbroadcastmanager:1.1.0")
+
     // Core Android
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.6")

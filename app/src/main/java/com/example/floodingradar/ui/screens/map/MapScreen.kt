@@ -23,8 +23,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.compose.animation.core.*
 import com.example.floodingradar.viewmodel.MapViewModel
 import com.google.android.gms.location.LocationServices
+import com.google.maps.android.compose.Circle
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.*
@@ -32,14 +34,19 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MapScreen(viewModel: MapViewModel, onNavigateToReports: () -> Unit = {}, onNavigateToSettings: () -> Unit = {}) {
+fun MapScreen(
+    viewModel: MapViewModel,
+    targetLat: String? = null,
+    targetLng: String? = null,
+    onNavigateToReports: () -> Unit = {},
+    onNavigateToSettings: () -> Unit = {}
+) {
     val context = LocalContext.current
     val alertas by viewModel.alertas.collectAsState()
 
-    // Filter alertas for TODAY only for the Map and Nearby Dialog
     val todaySdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
-    val todayString = todaySdf.format(java.util.Date())
-    val alertasHoje = alertas.filter { it.data_hora?.startsWith(todayString) == true }
+    val todayStr = todaySdf.format(java.util.Date())
+    val alertasHoje = alertas.filter { it.data_hora?.startsWith(todayStr) == true }
 
     var showOfflineDialog by remember { mutableStateOf(false) }
     var showNearbyDialog by remember { mutableStateOf(false) }
@@ -53,17 +60,28 @@ fun MapScreen(viewModel: MapViewModel, onNavigateToReports: () -> Unit = {}, onN
 
     var hasLocationPermission by remember { mutableStateOf(false) }
 
+    var userLocation by remember { mutableStateOf<LatLng?>(null) }
+
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
         onResult = { isGranted ->
             hasLocationPermission = isGranted
             if (isGranted) {
                 try {
-                    fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+                    fusedLocationClient.getCurrentLocation(com.google.android.gms.location.Priority.PRIORITY_HIGH_ACCURACY, null).addOnSuccessListener { location ->
                         location?.let {
-                            cameraPositionState.position = CameraPosition.fromLatLngZoom(
-                                LatLng(it.latitude, it.longitude), 15f
-                            )
+                            userLocation = LatLng(it.latitude, it.longitude)
+                            context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE).edit().apply {
+                                putFloat("last_lat", it.latitude.toFloat())
+                                putFloat("last_lng", it.longitude.toFloat())
+                                apply()
+                            }
+                            // Apenas move para o usuário se NÃO tiver vindo da notificação
+                            if (targetLat == null || targetLng == null) {
+                                cameraPositionState.position = CameraPosition.fromLatLngZoom(
+                                    LatLng(it.latitude, it.longitude), 17f
+                                )
+                            }
                         }
                     }
                 } catch (e: SecurityException) {
@@ -74,13 +92,28 @@ fun MapScreen(viewModel: MapViewModel, onNavigateToReports: () -> Unit = {}, onN
     )
 
     LaunchedEffect(Unit) {
+        if (targetLat != null && targetLng != null) {
+            // Se veio da notificação, já centraliza o mapa no alerta reportado
+            val lat = targetLat.toDoubleOrNull() ?: saoPaulo.latitude
+            val lng = targetLng.toDoubleOrNull() ?: saoPaulo.longitude
+            cameraPositionState.position = CameraPosition.fromLatLngZoom(LatLng(lat, lng), 17f)
+        }
+
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
             hasLocationPermission = true
-            fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+            fusedLocationClient.getCurrentLocation(com.google.android.gms.location.Priority.PRIORITY_HIGH_ACCURACY, null).addOnSuccessListener { location ->
                 location?.let {
-                    cameraPositionState.position = CameraPosition.fromLatLngZoom(
-                        LatLng(it.latitude, it.longitude), 15f
-                    )
+                    userLocation = LatLng(it.latitude, it.longitude)
+                    context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE).edit().apply {
+                        putFloat("last_lat", it.latitude.toFloat())
+                        putFloat("last_lng", it.longitude.toFloat())
+                        apply()
+                    }
+                    if (targetLat == null || targetLng == null) {
+                        cameraPositionState.position = CameraPosition.fromLatLngZoom(
+                            LatLng(it.latitude, it.longitude), 17f
+                        )
+                    }
                 }
             }
         } else {
@@ -113,6 +146,7 @@ fun MapScreen(viewModel: MapViewModel, onNavigateToReports: () -> Unit = {}, onN
 
     ModalNavigationDrawer(
         drawerState = drawerState,
+        gesturesEnabled = drawerState.isOpen, 
         drawerContent = {
             ModalDrawerSheet {
                 Spacer(Modifier.height(12.dp))
@@ -124,40 +158,43 @@ fun MapScreen(viewModel: MapViewModel, onNavigateToReports: () -> Unit = {}, onN
                     onClick = { scope.launch { drawerState.close() } },
                     modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
                 )
+                val context = LocalContext.current
+                val sharedPref = remember { context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE) }
+                val raioKm = sharedPref.getInt("notificacoes_raio_km", 3)
+                
                 NavigationDrawerItem(
-                    label = { Text("Relatório Histórico") },
+                    label = { Text("Alertas próximos (${raioKm}km)") },
                     selected = false,
-                    onClick = { 
+                    onClick = {
                         scope.launch { drawerState.close() }
-                        onNavigateToReports() 
+                        showNearbyDialog = true
                     },
                     modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
                 )
                 NavigationDrawerItem(
-                    label = { Text("Alertas na Região Hoje (3km)") },
+                    label = { Text("Relatório Histórico") },
                     selected = false,
-                    onClick = { 
+                    onClick = {
                         scope.launch { drawerState.close() }
-                        showNearbyDialog = true 
+                        onNavigateToReports()
                     },
                     modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
                 )
                 NavigationDrawerItem(
                     label = { Text("Meus Alertas (Offline)") },
                     selected = false,
-                    onClick = { 
+                    onClick = {
                         scope.launch { drawerState.close() }
-                        showOfflineDialog = true 
+                        showOfflineDialog = true
                     },
                     modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
                 )
-                HorizontalDivider()
                 NavigationDrawerItem(
                     label = { Text("Configurações") },
                     selected = false,
-                    onClick = { 
+                    onClick = {
                         scope.launch { drawerState.close() }
-                        onNavigateToSettings() 
+                        onNavigateToSettings()
                     },
                     modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
                 )
@@ -168,15 +205,16 @@ fun MapScreen(viewModel: MapViewModel, onNavigateToReports: () -> Unit = {}, onN
             snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
                 TopAppBar(
-                    title = { Text("Mapa de Alertas (Hoje)") },
+                    title = { Text("Radar de Alagamentos") },
                     navigationIcon = {
                         IconButton(onClick = { scope.launch { drawerState.open() } }) {
                             Icon(Icons.Default.Menu, contentDescription = "Menu")
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                        navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
                     )
                 )
             },
@@ -207,6 +245,18 @@ fun MapScreen(viewModel: MapViewModel, onNavigateToReports: () -> Unit = {}, onN
                 ) {
                     val sharedPref = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
                     val usuarioLogado = sharedPref.getString("nome_usuario", "Anônimo") ?: "Anônimo"
+                    val raioKm = sharedPref.getInt("notificacoes_raio_km", 3)
+
+                    // Desenha o Radar (Círculo fixo e mais transparente para melhor performance)
+                    userLocation?.let { loc ->
+                        Circle(
+                            center = loc,
+                            radius = raioKm * 1000.0,
+                            fillColor = androidx.compose.ui.graphics.Color(0x0A0000FF), // Azul bem fraquinho (4% opacidade)
+                            strokeColor = androidx.compose.ui.graphics.Color(0x330000FF), // Borda sutil (20% opacidade)
+                            strokeWidth = 2f
+                        )
+                    }
 
                     alertasHoje.filter { it.status != "removido" }.forEach { alerta ->
                         val dataFormatada = alerta.data_hora?.let { dh ->
@@ -226,8 +276,12 @@ fun MapScreen(viewModel: MapViewModel, onNavigateToReports: () -> Unit = {}, onN
                             title = alerta.tipo_alerta,
                             snippet = "${alerta.usuario}$tempoStr$obsStr",
                             onInfoWindowClick = {
-                                if (alerta.usuario == usuarioLogado && alerta.id != null) {
-                                    showDeleteConfirmDialog = alerta.id
+                                if (alerta.usuario == usuarioLogado) {
+                                    if (alerta.id != null) {
+                                        showDeleteConfirmDialog = alerta.id
+                                    } else {
+                                        android.widget.Toast.makeText(context, "Sincronizando com o servidor... Tente excluir em instantes.", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
                                 }
                             }
                         ) { marker ->
@@ -385,14 +439,17 @@ fun MapScreen(viewModel: MapViewModel, onNavigateToReports: () -> Unit = {}, onN
     }
 
     if (showNearbyDialog) {
-        val myLoc = cameraPositionState.position.target // Usa o centro do mapa como "Minha Localização" (ou a última conhecida)
+        val myLoc = cameraPositionState.position.target 
         val context = LocalContext.current
+        val sharedPref = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+        val raioKm = sharedPref.getInt("notificacoes_raio_km", 3)
+        val raioMetros = raioKm * 1000f
         
-        // Filtra os alertas em um raio de 3km (3000 metros)
+        // Filtra os alertas em um raio dinâmico
         val proximos = alertasHoje.filter { a ->
             val results = FloatArray(1)
             android.location.Location.distanceBetween(myLoc.latitude, myLoc.longitude, a.latitude, a.longitude, results)
-            results[0] <= 3000f
+            results[0] <= raioMetros
         }.sortedBy { a ->
             val results = FloatArray(1)
             android.location.Location.distanceBetween(myLoc.latitude, myLoc.longitude, a.latitude, a.longitude, results)
@@ -401,10 +458,10 @@ fun MapScreen(viewModel: MapViewModel, onNavigateToReports: () -> Unit = {}, onN
 
         AlertDialog(
             onDismissRequest = { showNearbyDialog = false },
-            title = { Text("Alertas Num Raio de 3km") },
+            title = { Text("Alertas Num Raio de ${raioKm}km") },
             text = {
                 if (proximos.isEmpty()) {
-                    Text("Nenhum alerta reportado nos arredores (3km).")
+                    Text("Nenhum alerta reportado nos arredores (${raioKm}km).")
                 } else {
                     LazyColumn {
                         items(proximos) { p ->
