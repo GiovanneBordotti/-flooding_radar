@@ -23,7 +23,7 @@ def enviar_push_notification(alerta):
         topic="alertas"
     )
     resposta = messaging.send(mensagem_push)
-    print(f" [✓] Push Notification enviada com sucesso: {resposta}")
+    print(f" [OK] Push Notification enviada com sucesso: {resposta}")
 
 def callback(ch, method, properties, body):
     # Converte o JSON recebido de volta para um dicionário
