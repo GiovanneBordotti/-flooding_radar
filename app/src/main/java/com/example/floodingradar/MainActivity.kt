@@ -20,10 +20,18 @@ import com.example.floodingradar.viewmodel.MapViewModel
 import com.google.firebase.messaging.FirebaseMessaging
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.floodingradar.ui.screens.home.HomeScreen
+import com.example.floodingradar.ui.screens.home.OnboardingScreen
 import com.example.floodingradar.ui.screens.reports.ReportsScreen
 import com.example.floodingradar.ui.screens.settings.SettingsScreen
+import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Place
+import androidx.compose.runtime.getValue
+import androidx.compose.foundation.layout.padding
 
 class MainActivity : ComponentActivity() {
     private val mapViewModel: MapViewModel by viewModels()
@@ -53,7 +61,8 @@ class MainActivity : ComponentActivity() {
         val sharedPref = getSharedPreferences("user_prefs", android.content.Context.MODE_PRIVATE)
         val nomeUsuario = sharedPref.getString("nome_usuario", "")
         val notificacoesAtivadas = sharedPref.getBoolean("notificacoes_ativadas", true)
-        val startDest = if (!nomeUsuario.isNullOrBlank()) "map" else "home"
+        val aceitouTermos = sharedPref.getBoolean("aceitou_termos", false)
+        val startDest = if (!nomeUsuario.isNullOrBlank() && aceitouTermos) "home" else "onboarding"
 
         if (notificacoesAtivadas) {
             FirebaseMessaging.getInstance().subscribeToTopic("alertas")
@@ -73,39 +82,81 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             MaterialTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    val navController = rememberNavController()
+                val navController = rememberNavController()
+                val navBackStackEntry by navController.currentBackStackEntryAsState()
+                val currentRoute = navBackStackEntry?.destination?.route
 
-                    NavHost(navController = navController, startDestination = startDest) {
-                        composable("home") {
-                            HomeScreen(onNavigateToMap = {
-                                navController.navigate("map") {
-                                    popUpTo("home") { inclusive = true }
-                                }
-                            })
+                Scaffold(
+                    bottomBar = {
+                        if (currentRoute == "home" || currentRoute == "map") {
+                            NavigationBar {
+                                NavigationBarItem(
+                                    icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
+                                    label = { Text("Home") },
+                                    selected = currentRoute == "home",
+                                    onClick = {
+                                        if (currentRoute != "home") {
+                                            navController.navigate("home") {
+                                                popUpTo(navController.graph.startDestinationId)
+                                                launchSingleTop = true
+                                            }
+                                        }
+                                    }
+                                )
+                                NavigationBarItem(
+                                    icon = { Icon(Icons.Default.Place, contentDescription = "Mapa") },
+                                    label = { Text("Mapa") },
+                                    selected = currentRoute == "map",
+                                    onClick = {
+                                        if (currentRoute != "map") {
+                                            navController.navigate("map") {
+                                                popUpTo(navController.graph.startDestinationId)
+                                                launchSingleTop = true
+                                            }
+                                        }
+                                    }
+                                )
+                            }
                         }
-                        composable("map") {
-                            MapScreen(
-                                viewModel = mapViewModel,
-                                targetLat = targetLat,
-                                targetLng = targetLng,
-                                onNavigateToReports = { navController.navigate("reports") },
-                                onNavigateToSettings = { navController.navigate("settings") }
-                            )
-                        }
-                        composable("reports") {
-                            ReportsScreen(
-                                viewModel = mapViewModel,
-                                onBack = { navController.popBackStack() }
-                            )
-                        }
-                        composable("settings") {
-                            SettingsScreen(
-                                onBack = { navController.popBackStack() }
-                            )
+                    }
+                ) { innerPadding ->
+                    Surface(
+                        modifier = Modifier.fillMaxSize().padding(innerPadding),
+                        color = MaterialTheme.colorScheme.background
+                    ) {
+                        NavHost(navController = navController, startDestination = startDest) {
+                            composable("onboarding") {
+                                OnboardingScreen(onNavigateToMap = {
+                                    navController.navigate("home") {
+                                        popUpTo("onboarding") { inclusive = true }
+                                    }
+                                })
+                            }
+                            composable("home") {
+                                HomeScreen(onNavigateToMap = {
+                                    navController.navigate("map")
+                                })
+                            }
+                            composable("map") {
+                                MapScreen(
+                                    viewModel = mapViewModel,
+                                    targetLat = targetLat,
+                                    targetLng = targetLng,
+                                    onNavigateToReports = { navController.navigate("reports") },
+                                    onNavigateToSettings = { navController.navigate("settings") }
+                                )
+                            }
+                            composable("reports") {
+                                ReportsScreen(
+                                    viewModel = mapViewModel,
+                                    onBack = { navController.popBackStack() }
+                                )
+                            }
+                            composable("settings") {
+                                SettingsScreen(
+                                    onBack = { navController.popBackStack() }
+                                )
+                            }
                         }
                     }
                 }

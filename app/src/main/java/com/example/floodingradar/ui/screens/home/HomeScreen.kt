@@ -1,104 +1,144 @@
 package com.example.floodingradar.ui.screens.home
 
 import android.content.Context
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(onNavigateToMap: () -> Unit) {
     val context = LocalContext.current
     val sharedPref = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
-    
-    var nome by remember { mutableStateOf(sharedPref.getString("nome_usuario", "") ?: "") }
-    var aceitouTermos by remember { mutableStateOf(sharedPref.getBoolean("aceitou_termos", false)) }
-    var mostrarTermos by remember { mutableStateOf(false) }
+    val nome = sharedPref.getString("nome_usuario", "Cidadão") ?: "Cidadão"
+    val scrollState = rememberScrollState()
 
-    if (mostrarTermos) {
-        AlertDialog(
-            onDismissRequest = { mostrarTermos = false },
-            title = { Text("Termos de Uso e Privacidade") },
-            text = {
-                Text("De acordo com a Lei Geral de Proteção de Dados (LGPD), informamos que o Flooding Radar coleta e armazena a sua geolocalização exata estritamente para o propósito de registrar e notificar desastres naturais (alagamentos e quedas de árvores) próximos a você. Seu apelido será salvo publicamente para identificar a autoria dos alertas. Você pode apagar seus alertas a qualquer momento. Ao continuar, você consente com o uso destes dados.")
-            },
-            confirmButton = {
-                TextButton(onClick = { mostrarTermos = false }) {
-                    Text("Entendi")
-                }
-            }
-        )
-    }
-
-    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Início") },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimary
+                )
+            )
+        }
+    ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(24.dp),
-            verticalArrangement = Arrangement.Center,
+                .padding(padding)
+                .verticalScroll(scrollState)
+                .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // Header
             Text(
-                text = "Bem-vindo ao",
-                style = MaterialTheme.typography.titleLarge
-            )
-            Text(
-                text = "Flooding Radar",
-                style = MaterialTheme.typography.headlineLarge,
+                text = "Olá, $nome!",
+                style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(bottom = 32.dp)
+                modifier = Modifier.fillMaxWidth()
+            )
+            Text(
+                text = "Bem-vindo ao Flooding Radar.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = Color.Gray,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)
             )
 
-            OutlinedTextField(
-                value = nome,
-                onValueChange = { nome = it },
-                label = { Text("Qual o seu nome?") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+            // Apresentação Card
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                shape = RoundedCornerShape(12.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
             ) {
-                Checkbox(
-                    checked = aceitouTermos,
-                    onCheckedChange = { aceitouTermos = it }
-                )
-                Text(
-                    text = "Li e concordo com a Política de Privacidade e consentimento de Localização.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.clickable { mostrarTermos = true }.padding(start = 4.dp)
-                )
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
+                        Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("O que é o Flooding Radar?", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    }
+                    Text(
+                        "Um aplicativo colaborativo (Crowdsourcing) construído para proteger você e seus bens. Relate enchentes e quedas de árvores mesmo sem internet. O sistema armazena seu reporte e o envia quando a conexão voltar!",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
             }
+
+            // Features
+            FeatureItem(
+                icon = Icons.Default.LocationOn,
+                title = "Mapa em Tempo Real",
+                description = "Visualize marcadores ao vivo das ocorrências. Clique neles para ver detalhes ou use o botão (+) para relatar um novo incidente."
+            )
+
+            FeatureItem(
+                icon = Icons.Default.Notifications,
+                title = "Radar Dinâmico",
+                description = "Você só recebe notificações se o perigo estiver dentro do seu raio de radar configurado (ex: 3km). Seguro e livre de spam."
+            )
+
+            FeatureItem(
+                icon = Icons.Default.Warning,
+                title = "Offline-First",
+                description = "Acabou o 4G na tempestade? Não se preocupe, o app guarda seu reporte e sincroniza automaticamente depois."
+            )
 
             Spacer(modifier = Modifier.height(24.dp))
 
             Button(
-                onClick = {
-                    val nomeSalvar = nome.ifBlank { "Anônimo" }
-                    with (sharedPref.edit()) {
-                        putString("nome_usuario", nomeSalvar)
-                        putBoolean("aceitou_termos", aceitouTermos)
-                        apply()
-                    }
-                    onNavigateToMap()
-                },
-                enabled = aceitouTermos,
-                modifier = Modifier.fillMaxWidth().height(50.dp)
+                onClick = onNavigateToMap,
+                modifier = Modifier.fillMaxWidth().height(55.dp),
+                shape = RoundedCornerShape(12.dp)
             ) {
-                Text("Entrar no Mapa", style = MaterialTheme.typography.titleMedium)
+                Text("Abrir Mapa Interativo", fontSize = 18.sp, fontWeight = FontWeight.Bold)
             }
+            
+            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 }
 
+@Composable
+fun FeatureItem(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, description: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.secondaryContainer),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+        }
+        Spacer(modifier = Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Text(description, color = Color.Gray, fontSize = 14.sp)
+        }
+    }
+}
