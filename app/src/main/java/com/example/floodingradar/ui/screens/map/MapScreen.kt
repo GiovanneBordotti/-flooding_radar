@@ -101,18 +101,23 @@ fun MapScreen(
 
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
             hasLocationPermission = true
-            fusedLocationClient.getCurrentLocation(com.google.android.gms.location.Priority.PRIORITY_HIGH_ACCURACY, null).addOnSuccessListener { location ->
-                location?.let {
-                    userLocation = LatLng(it.latitude, it.longitude)
-                    context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE).edit().apply {
-                        putFloat("last_lat", it.latitude.toFloat())
-                        putFloat("last_lng", it.longitude.toFloat())
-                        apply()
-                    }
-                    if (targetLat == null || targetLng == null) {
-                        cameraPositionState.position = CameraPosition.fromLatLngZoom(
-                            LatLng(it.latitude, it.longitude), 17f
-                        )
+            val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
+            if (!locationManager.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER)) {
+                android.widget.Toast.makeText(context, "Por favor, ative o GPS (Localização) do seu celular.", android.widget.Toast.LENGTH_LONG).show()
+            } else {
+                fusedLocationClient.getCurrentLocation(com.google.android.gms.location.Priority.PRIORITY_HIGH_ACCURACY, null).addOnSuccessListener { location ->
+                    location?.let {
+                        userLocation = LatLng(it.latitude, it.longitude)
+                        context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE).edit().apply {
+                            putFloat("last_lat", it.latitude.toFloat())
+                            putFloat("last_lng", it.longitude.toFloat())
+                            apply()
+                        }
+                        if (targetLat == null || targetLng == null) {
+                            cameraPositionState.position = CameraPosition.fromLatLngZoom(
+                                LatLng(it.latitude, it.longitude), 17f
+                            )
+                        }
                     }
                 }
             }
@@ -508,7 +513,12 @@ fun MapScreen(
                                         Text(text = "${p.tipo_alerta} [Retirado pelo autor]", fontWeight = FontWeight.Bold, color = androidx.compose.ui.graphics.Color.Gray)
                                         Text(text = "Em: $dataFormatada", style = MaterialTheme.typography.bodySmall, color = androidx.compose.ui.graphics.Color.Gray)
                                     } else {
-                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
+                                        Row(modifier = Modifier.fillMaxWidth().clickable {
+    cameraPositionState.position = CameraPosition.fromLatLngZoom(
+        LatLng(p.latitude, p.longitude), 17f
+    )
+    showNearbyDialog = false
+}.padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
                                             Column(modifier = Modifier.weight(1f)) {
                                                 Text(text = p.tipo_alerta, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
                                                 if (!p.observacao.isNullOrBlank()) {

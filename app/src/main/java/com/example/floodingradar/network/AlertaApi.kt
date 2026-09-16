@@ -13,6 +13,6 @@ interface AlertaApi {
     suspend fun criarAlerta(@Body alerta: Alerta): Alerta
 
     @retrofit2.http.PUT("alertas/{id}/remover")
-    suspend fun removerAlerta(@retrofit2.http.Path("id") id: Int)
+    suspend fun removerAlerta(@retrofit2.http.Path("id") id: Int): Any
 }
 
