@@ -61,8 +61,15 @@ class MainActivity : ComponentActivity() {
         val sharedPref = getSharedPreferences("user_prefs", android.content.Context.MODE_PRIVATE)
         val nomeUsuario = sharedPref.getString("nome_usuario", "")
         val notificacoesAtivadas = sharedPref.getBoolean("notificacoes_ativadas", true)
+        val targetLat = intent.getStringExtra("target_lat")
+        val targetLng = intent.getStringExtra("target_lng")
+
         val aceitouTermos = sharedPref.getBoolean("aceitou_termos", false)
-        val startDest = if (!nomeUsuario.isNullOrBlank() && aceitouTermos) "home" else "onboarding"
+        val startDest = if (!nomeUsuario.isNullOrBlank() && aceitouTermos) {
+            if (targetLat != null) "map" else "home"
+        } else {
+            "onboarding"
+        }
 
         if (notificacoesAtivadas) {
             FirebaseMessaging.getInstance().subscribeToTopic("alertas")
@@ -75,10 +82,6 @@ class MainActivity : ComponentActivity() {
                 requestPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
             }
         }
-
-        // Pega as coordenadas se tiver sido aberto clicando numa Notificação
-        val targetLat = intent.getStringExtra("target_lat")
-        val targetLng = intent.getStringExtra("target_lng")
 
         setContent {
             MaterialTheme {
